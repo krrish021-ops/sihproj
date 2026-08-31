@@ -1,0 +1,202 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --blueprint: #0E2A47;
+  --blueprint-mid: #163A5F;
+  --blueprint-line: #2F5C86;
+  --paper: #FBF9F4;
+  --ink: #12202B;
+  --gold: #D9A441;
+  --gold-dark: #B8842E;
+  --success: #3D8361;
+  --danger: #C1443C;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+/* Focus visibility for accessibility */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--paper); }
+::-webkit-scrollbar-thumb { background: var(--blueprint-line); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blueprint-mid); }
+
+/* Blueprint grid backdrop, used on dark hero/panels */
+.blueprint-surface {
+  background-color: var(--blueprint);
+  background-image:
+    linear-gradient(rgba(217, 164, 65, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(217, 164, 65, 0.12) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Corner-bracket card: a drafting-table annotation motif used for the signature elements */
+.blueprint-card {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid rgba(14, 42, 71, 0.12);
+}
+
+.blueprint-card::before,
+.blueprint-card::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-color: var(--gold);
+  border-style: solid;
+}
+
+.blueprint-card::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.blueprint-card::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+/* Buttons */
+.btn {
+  padding: 12px 22px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  border: none;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--blueprint);
+  color: #ffffff;
+}
+.btn-primary:hover { background: var(--blueprint-mid); box-shadow: 0 4px 14px rgba(14, 42, 71, 0.25); }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--blueprint);
+  border: 1.5px solid var(--blueprint-line);
+}
+.btn-secondary:hover { background: var(--blueprint-50, #EAF1F7); }
+
+.btn-cta {
+  background: var(--gold);
+  color: var(--blueprint);
+}
+.btn-cta:hover { background: var(--gold-dark); box-shadow: 0 4px 14px rgba(217, 164, 65, 0.35); }
+
+.btn-danger {
+  background: var(--danger);
+  color: #ffffff;
+}
+.btn-danger:hover { background: #a8362f; }
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid rgba(14, 42, 71, 0.18);
+  border-radius: 6px;
+  font-size: 15px;
+  font-family: 'Inter', sans-serif;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: #ffffff;
+  color: var(--ink);
+}
+
+.input:focus {
+  border-color: var(--blueprint-line);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(47, 92, 134, 0.15);
+}
+
+.input::placeholder { color: #8b96a0; }
+
+/* Metric / label text, used for scores and skill percentages */
+.metric-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--blueprint-line);
+}
+
+/* Progress */
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(14, 42, 71, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blueprint-line), var(--blueprint));
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+/* Skill / tag pill */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
