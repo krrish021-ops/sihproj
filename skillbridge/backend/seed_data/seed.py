@@ -1,265 +1,104 @@
-# Seed Data
-from database import Base, engine, SessionLocal
-from models.user import User, StudentProfile, StudentSkill, StudentProject, RecruiterProfile, AcademicianProfile, UserRole
-from models.opportunity import Opportunity, OpportunityType
-from models.course import Course, Project
-from datetime import datetime, timedelta
-from passlib.context import CryptContext
-import json
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from database import engine, SessionLocal, Base
+from models.user import User
+from models.student import StudentProfile, StudentSkill, StudentProject
+from models.recruiter import Recruiter
+from models.academician import Academician
+from models.opportunity import Opportunity
+from models.course import Course
+from utils.auth import hash_password
 
-def seed_database():
+def seed():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
-    
-    # Check if already seeded
-    if db.query(User).count() > 0:
-        print("Database already seeded!")
-        db.close()
-        return
-    
-    # Create Recruiter
-    recruiter_user = User(
-        email="hr@techcorp.com",
-        password_hash=pwd_context.hash("TechCorp@123"),
-        full_name="Rahul Sharma",
-        role=UserRole.RECRUITER
-    )
-    db.add(recruiter_user)
-    db.flush()
-    
-    recruiter_profile = RecruiterProfile(
-        user_id=recruiter_user.id,
-        company_name="TechCorp Solutions",
-        company_website="https://techcorp.com",
-        industry_type="Information Technology"
-    )
-    db.add(recruiter_profile)
-    db.flush()
-    
-    # Create Academician
-    academician_user = User(
-        email="prof.sharma@college.edu",
-        password_hash=pwd_context.hash("TechCorp@123"),
-        full_name="Prof. Amit Sharma",
-        role=UserRole.ACADEMICIAN
-    )
-    db.add(academician_user)
-    db.flush()
-    
-    academician_profile = AcademicianProfile(
-        user_id=academician_user.id,
-        institution="IIT Delhi",
-        department="Computer Science"
-    )
-    db.add(academician_profile)
-    
-    # Create Courses
-    courses = [
-        Course(
-            title="Python for Data Science and Machine Learning",
-            provider="Udemy",
-            instructor="Jose Portilla",
-            rating=4.7,
-            enrollment_count=450000,
-            duration_hours=25,
-            level="Beginner",
-            skills_covered=["Python", "Data Science", "Machine Learning"],
-            price=499,
-            original_price=3499,
-            course_url="https://www.udemy.com/course/python-for-data-science/"
-        ),
-        Course(
-            title="The Complete JavaScript Course 2024",
-            provider="Udemy",
-            instructor="Jonas Schmedtmann",
-            rating=4.8,
-            enrollment_count=800000,
-            duration_hours=69,
-            level="Beginner",
-            skills_covered=["JavaScript", "HTML", "CSS"],
-            price=529,
-            original_price=3699,
-            course_url="https://www.udemy.com/course/the-complete-javascript-course/"
-        ),
-        Course(
-            title="React - The Complete Guide 2024",
-            provider="Udemy",
-            instructor="Maximilian Schwarzmüller",
-            rating=4.7,
-            enrollment_count=650000,
-            duration_hours=48,
-            level="Intermediate",
-            skills_covered=["React", "Redux", "JavaScript"],
-            price=549,
-            original_price=3799,
-            course_url="https://www.udemy.com/course/react-the-complete-guide/"
-        ),
-        Course(
-            title="Machine Learning A-Z",
-            provider="Udemy",
-            instructor="Kirill Eremenko",
-            rating=4.5,
-            enrollment_count=700000,
-            duration_hours=42,
-            level="Intermediate",
-            skills_covered=["Machine Learning", "Python"],
-            price=549,
-            original_price=3799,
-            course_url="https://www.udemy.com/course/machinelearning/"
-        ),
-        Course(
-            title="SQL for Data Analysis",
-            provider="Coursera",
-            instructor="Duke University",
-            rating=4.6,
-            enrollment_count=120000,
-            duration_hours=20,
-            level="Intermediate",
-            skills_covered=["SQL", "Data Analysis"],
-            price=399,
-            original_price=2999,
-            course_url="https://www.coursera.org/learn/sql-for-data-analysis"
-        ),
-        Course(
-            title="Full Stack Web Development Bootcamp",
-            provider="Udemy",
-            instructor="Angela Yu",
-            rating=4.8,
-            enrollment_count=900000,
-            duration_hours=62,
-            level="Beginner",
-            skills_covered=["HTML", "CSS", "JavaScript", "Node.js", "React"],
-            price=529,
-            original_price=3699,
-            course_url="https://www.udemy.com/course/the-complete-web-development-bootcamp/"
-        ),
-    ]
-    
-    for course in courses:
-        db.add(course)
-    
-    # Create Projects
-    projects = [
-        Project(
-            title="Build a Todo List Application",
-            description="Create a full-featured todo list app with React",
-            skills_taught=["React", "JavaScript", "HTML", "CSS"],
-            difficulty="Beginner",
-            estimated_hours=10,
-            learning_outcome="Understand React components and state management"
-        ),
-        Project(
-            title="E-commerce Website",
-            description="Build a complete e-commerce platform",
-            skills_taught=["React", "Node.js", "MongoDB"],
-            difficulty="Intermediate",
-            estimated_hours=40,
-            learning_outcome="Full-stack development"
-        ),
-        Project(
-            title="Portfolio Website",
-            description="Create a stunning portfolio website",
-            skills_taught=["HTML", "CSS", "JavaScript"],
-            difficulty="Beginner",
-            estimated_hours=15,
-            learning_outcome="Responsive design"
-        ),
-        Project(
-            title="Chat Application",
-            description="Build a real-time chat application",
-            skills_taught=["Node.js", "Socket.io", "React"],
-            difficulty="Intermediate",
-            estimated_hours=25,
-            learning_outcome="WebSocket communication"
-        ),
-        Project(
-            title="Data Analysis Dashboard",
-            description="Create a data visualization dashboard",
-            skills_taught=["Python", "Pandas", "Plotly"],
-            difficulty="Intermediate",
-            estimated_hours=20,
-            learning_outcome="Data analysis and visualization"
-        ),
-    ]
-    
-    for project in projects:
-        db.add(project)
-    
-    # Create Opportunities
-    opportunities = [
-        Opportunity(
-            recruiter_id=recruiter_profile.id,
-            title="Frontend Developer Intern",
-            description="Looking for passionate frontend developers",
-            type=OpportunityType.INTERNSHIP,
-            required_skills=[
-                {"skill": "JavaScript", "proficiency": 70},
-                {"skill": "React", "proficiency": 60},
-                {"skill": "HTML", "proficiency": 80},
-                {"skill": "CSS", "proficiency": 70}
-            ],
-            location="Bangalore",
-            stipend="₹25,000/month",
-            duration="3 months",
-            is_active=True
-        ),
-        Opportunity(
-            recruiter_id=recruiter_profile.id,
-            title="Python Developer - Full Time",
-            description="Join our backend team",
-            type=OpportunityType.JOB,
-            required_skills=[
-                {"skill": "Python", "proficiency": 80},
-                {"skill": "Django", "proficiency": 60},
-                {"skill": "PostgreSQL", "proficiency": 50}
-            ],
-            location="Remote",
-            stipend="₹8,00,000/year",
-            duration="Full-time",
-            is_active=True
-        ),
-        Opportunity(
-            recruiter_id=recruiter_profile.id,
-            title="Mobile App Development Project",
-            description="Develop a cross-platform mobile app",
-            type=OpportunityType.PROJECT,
-            required_skills=[
-                {"skill": "React Native", "proficiency": 70},
-                {"skill": "JavaScript", "proficiency": 75}
-            ],
-            location="Remote",
-            stipend="₹50,000/project",
-            duration="2 months",
-            is_active=True
-        ),
-        Opportunity(
-            recruiter_id=recruiter_profile.id,
-            title="Data Analyst Intern",
-            description="Work with large datasets",
-            type=OpportunityType.INTERNSHIP,
-            required_skills=[
-                {"skill": "Python", "proficiency": 60},
-                {"skill": "SQL", "proficiency": 70},
-                {"skill": "Data Analysis", "proficiency": 50}
-            ],
-            location="Mumbai",
-            stipend="₹20,000/month",
+
+    try:
+        if db.query(User).first():
+            print("Database already seeded.")
+            return
+
+        # 1. Course Catalog
+        courses = [
+            Course(title="Ayurveda Informatics & Digital Healthcare Records", provider="Ministry of AYUSH / Swayam", url="https://swayam.gov.in", skill_tags="Ayurveda Informatics, Healthcare, SQL", difficulty="beginner", duration_hours=40, is_free=1),
+            Course(title="Deep Learning with PyTorch & Computer Vision", provider="NPTEL", url="https://nptel.ac.in", skill_tags="Machine Learning, Python, PyTorch, Computer Vision", difficulty="intermediate", duration_hours=60, is_free=1),
+            Course(title="FastAPI High-Performance Microservices", provider="SkillBridge Academy", url="https://fastapi.tiangolo.com", skill_tags="FastAPI, Python, Docker, Backend", difficulty="intermediate", duration_hours=25, is_free=1),
+            Course(title="Enterprise React & Next.js Architecture", provider="Coursera / Meta", url="https://coursera.org", skill_tags="React, JavaScript, Frontend", difficulty="intermediate", duration_hours=35, is_free=0),
+        ]
+        db.add_all(courses)
+        db.commit()
+
+        # 2. Students
+        s1 = User(name="Rahul Sharma", email="rahul@student.com", password_hash=hash_password("password123"), role="student")
+        db.add(s1)
+        db.commit()
+        db.refresh(s1)
+
+        p1 = StudentProfile(user_id=s1.id, college="IIT Delhi", department="Computer Science", year_of_study=3, cgpa=8.8, bio="AI/ML developer passionate about national digital health systems.")
+        db.add(p1)
+        db.commit()
+        db.refresh(p1)
+
+        for sk, val, ver in [("Python", 8, 8.5), ("Machine Learning", 7, 7.8), ("FastAPI", 8, 8.0), ("Ayurveda Informatics", 6, 6.5)]:
+            db.add(StudentSkill(profile_id=p1.id, skill_name=sk, self_rating=val, verified_rating=ver, is_verified=1))
+
+        db.add(StudentProject(profile_id=p1.id, title="AyurVision: Herbal Specimen Classifier", description="Convolutional neural network for automatic identification of medicinal flora under AYUSH taxonomy.", tech_stack="Python, PyTorch, FastAPI, React"))
+
+        # 3. Recruiter
+        r1 = User(name="Amit Kumar", email="hr@techcorp.com", password_hash=hash_password("password123"), role="recruiter")
+        db.add(r1)
+        db.commit()
+        db.refresh(r1)
+
+        db.add(Recruiter(user_id=r1.id, company_name="National AYUSH Health-Tech Consortium", designation="Head of Engineering Recruitment"))
+
+        db.add(Opportunity(
+            recruiter_id=r1.id,
+            title="Digital Health & AI Platform Engineer",
+            description="Developing national-scale interoperable health data records conforming to Ministry of AYUSH benchmarks.",
+            company_name="National AYUSH Health-Tech Consortium",
+            location="New Delhi (Hybrid)",
+            opportunity_type="internship",
+            stipend=30000,
             duration="6 months",
-            is_active=True
-        ),
-    ]
-    
-    for opportunity in opportunities:
-        db.add(opportunity)
-    
-    db.commit()
-    db.close()
-    print("✅ Database seeded successfully!")
-    print("Test Accounts:")
-    print("Recruiter: hr@techcorp.com / TechCorp@123")
-    print("Academician: prof.sharma@college.edu / TechCorp@123")
+            required_skills="Python, FastAPI, Machine Learning, Ayurveda Informatics",
+            min_cgpa=7.5,
+        ))
+
+        db.add(Opportunity(
+            recruiter_id=r1.id,
+            title="Full-Stack Cloud Developer",
+            description="Building cloud-native web portals for distributed student skill mapping.",
+            company_name="TechCorp India",
+            location="Bangalore",
+            opportunity_type="placement",
+            stipend=750000,
+            duration="Full-Time",
+            required_skills="React, JavaScript, Python, Docker",
+            min_cgpa=7.0,
+        ))
+
+        # 4. Academician
+        a1 = User(name="Prof. Anita Sharma", email="prof.sharma@college.edu", password_hash=hash_password("password123"), role="academician")
+        db.add(a1)
+        db.commit()
+        db.refresh(a1)
+
+        db.add(Academician(user_id=a1.id, institution="IIT Delhi", department="Computer Science", designation="Professor & Dean of Academics", specialization="Artificial Intelligence & Health Informatics"))
+
+        db.commit()
+        print("✅ Production database initialized and seeded successfully!")
+        print("\nVerified Credentials:")
+        print("  Student:     rahul@student.com / password123")
+        print("  Recruiter:   hr@techcorp.com / password123")
+        print("  Academician: prof.sharma@college.edu / password123")
+    except Exception as e:
+        db.rollback()
+        print(f"Error initializing seed: {e}")
+    finally:
+        db.close()
 
 if __name__ == "__main__":
-    seed_database()
+    seed()

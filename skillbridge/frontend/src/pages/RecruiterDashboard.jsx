@@ -1,81 +1,81 @@
-import React, { useEffect, useState } from 'react'
-import { useSelector } from 'react-redux'
-import { Link } from 'react-router-dom'
-import { getRecruiterDashboard } from '../services/recruiterService'
-import AppShell from '../components/layout/AppShell'
-import LoadingSpinner from '../components/common/LoadingSpinner'
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import AppShell from '../components/AppShell';
+import LoadingSpinner from '../components/LoadingSpinner';
 
-const RecruiterDashboard = () => {
-  const { user } = useSelector(state => state.auth)
-  const [dashboard, setDashboard] = useState(null)
-  const [loading, setLoading] = useState(true)
+const API = 'http://localhost:8000/api';
+const getHeaders = () => {
+  const t = localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t}` };
+};
+
+export default function RecruiterDashboard() {
+  const [data, setData] = useState({ opportunities: [] });
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    fetchDashboard()
-  }, [])
+    fetch(`${API}/recruiter/dashboard`, { headers: getHeaders() })
+      .then(r => r.ok ? r.json() : {})
+      .then(setData)
+      .finally(() => setLoading(false));
+  }, []);
 
-  const fetchDashboard = async () => {
-    try {
-      const data = await getRecruiterDashboard(user.id)
-      setDashboard(data)
-    } catch (error) {
-      console.error('Error:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  if (loading) return <AppShell><LoadingSpinner label="Loading dashboard…" /></AppShell>
+  if (loading) return <AppShell><LoadingSpinner label="Loading recruiter dashboard…" /></AppShell>;
 
   return (
     <AppShell>
-      <div className="max-w-6xl mx-auto p-8">
-        <div className="flex justify-between items-center mb-8">
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 24 }}>
           <div>
-            <h1 className="text-2xl font-display font-bold">Recruiter dashboard</h1>
-            <p className="text-ink/60 text-sm mt-1">{dashboard?.company_name || 'Company'}</p>
+            <div className="metric-label" style={{ marginBottom: 6 }}>RECRUITER PORTAL</div>
+            <h1 style={{ margin: 0 }}>{data.company_name || 'Company'}</h1>
+            <p style={{ color: '#12202B', opacity: 0.6, fontSize: 14, margin: '4px 0 0 0' }}>Manage opportunities and review verified candidates.</p>
           </div>
-          <Link to="/recruiter/post-opportunity" className="btn btn-cta text-sm">
+          <button className="btn btn-cta" onClick={() => navigate('/recruiter/post-opportunity')}>
             + Post opportunity
-          </Link>
+          </button>
         </div>
 
-        {dashboard?.opportunities?.length > 0 ? (
-          <div className="space-y-4">
-            {dashboard.opportunities.map(opp => (
-              <div key={opp.id} className="blueprint-card rounded-xl p-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-lg font-display font-bold">{opp.title}</h3>
-                    <span className="metric-label uppercase">{opp.type}</span>
-                  </div>
-                  <Link to={`/recruiter/candidates/${opp.id}`} className="btn btn-primary text-sm">
-                    View candidates
-                  </Link>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 30 }}>
+          <StatCard label="TOTAL OPPORTUNITIES" value={data.total_opportunities ?? 0} />
+          <StatCard label="ACTIVE POSTINGS" value={data.active_opportunities ?? 0} accent />
+          <StatCard label="TOTAL APPLICANTS" value={data.total_applications ?? 0} />
+        </div>
+
+        <h2 style={{ marginBottom: 16, fontSize: 20 }}>My opportunities</h2>
+        {(data.opportunities || []).length === 0 ? (
+          <div className="blueprint-card" style={{ textAlign: 'center', padding: 40 }}>
+            <p style={{ color: '#12202B', opacity: 0.6, margin: 0 }}>No opportunities posted yet.</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 20 }}>
+            {(data.opportunities || []).map(opp => (
+              <div key={opp.id} className="blueprint-card">
+                <div className="card-strip">OPPORTUNITY</div>
+                <h3 style={{ margin: '0 0 6px 0', fontSize: 16 }}>{opp.title}</h3>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+                  <span className="pill pill-blue">{opp.status}</span>
+                  <span className="pill pill-gold">{opp.applicant_count || 0} applicants</span>
                 </div>
-                <div className="grid grid-cols-3 gap-4 mt-5 text-center">
-                  <div>
-                    <p className="text-xl font-display font-bold">{opp.total_applications}</p>
-                    <p className="metric-label uppercase">Applications</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-display font-bold text-success">{opp.shortlisted_count}</p>
-                    <p className="metric-label uppercase">Shortlisted</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-display font-bold text-danger">{opp.rejected_count}</p>
-                    <p className="metric-label uppercase">Rejected</p>
-                  </div>
-                </div>
+                <button className="btn btn-primary" onClick={() => navigate(`/recruiter/candidates/${opp.id}`)} style={{ width: '100%' }}>
+                  View AI-ranked candidates →
+                </button>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-ink/50 text-sm">No opportunities posted yet.</p>
         )}
-      </div>
+      </motion.div>
     </AppShell>
-  )
+  );
 }
 
-export default RecruiterDashboard
+function StatCard({ label, value, accent }) {
+  return (
+    <div className="blueprint-card" style={{ padding: 18 }}>
+      <div className="metric-label">{label}</div>
+      <div className="metric-value" style={{ marginTop: 6, color: accent ? '#B8842E' : '#0E2A47' }}>{value}</div>
+    </div>
+  );
+}

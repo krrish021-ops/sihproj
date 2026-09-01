@@ -1,303 +1,232 @@
-"""
-Recommendation Agent (Assessment-Driven Recommendation Pipeline)
-================================================================
-Evaluates student assessment performance to recommend internships,
-diagnose skill deficits, and generate AI Career Guidance.
-"""
-
 import json
-from typing import TypedDict, List, Dict, Any, Optional
+from typing import TypedDict
+from sqlalchemy.orm import Session
+
 from langgraph.graph import StateGraph, END
-from database import SessionLocal
-from models.user import StudentProfile, StudentSkill
-from models.opportunity import Opportunity, OpportunityType
-from services.matching_service import compute_assessment_driven_match, merge_skills
-
-try:
-    from models.assessment import StudentAssessment
-except ImportError:
-    try:
-        from models.user import StudentAssessment
-    except ImportError:
-        StudentAssessment = None
-
-
-def _call_llm(prompt: str) -> Optional[str]:
-    try:
-        from utils.llm_setup import get_llm
-        llm = get_llm()
-        if llm:
-            res = llm.invoke(prompt)
-            return res.content.strip()
-    except Exception:
-        pass
-    return None
+from langchain_core.tools import tool
+from utils.llm_setup import get_llm
+from models.student import StudentProfile, StudentSkill, StudentProject
+from models.opportunity import Opportunity
+from models.course import Course
+from models.assessment import StudentAssessment
+from models.user import User
 
 
 class RecommendationState(TypedDict):
     user_id: int
-    student_profile: Optional[Dict]
-    self_rated_skills: List[Dict]
-    assessment_scores: Optional[Dict[str, int]]
-    overall_assessment_score: int
-    merged_skills: List[Dict]
-    skill_gaps: List[str]
-    courses: List[Dict]
-    internships: List[Dict]
-    jobs: List[Dict]
-    projects: List[Dict]
-    ai_analysis: Optional[str]
+    profile_data: dict
+    skill_data: list
+    assessment_data: list
+    opportunities: list
+    matched_internships: list
+    gap_courses: list
+    career_advice: str
+    has_assessments: bool
+    message: str
 
 
-def fetch_student_and_assessment(state: RecommendationState) -> dict:
-    db = SessionLocal()
-    try:
-        user_id = state["user_id"]
-        profile = db.query(StudentProfile).filter(StudentProfile.user_id == user_id).first()
-        
-        self_rated = []
-        assessment_skills = {}
-        overall_score = 0
+@tool
+def fetch_student_profile(user_id: int, db: Session) -> str:
+    """Retrieves the complete student profile, skills, and assessment history."""
+    user = db.query(User).filter(User.id == user_id).first()
+    profile = db.query(StudentProfile).filter(StudentProfile.user_id == user_id).first()
+    if not profile:
+        profile = StudentProfile(user_id=user_id, college="University", department="CS")
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
 
-        if profile:
-            skills = db.query(StudentSkill).filter(StudentSkill.student_id == profile.id).all()
-            self_rated = [{"skill": s.skill_name, "proficiency": s.proficiency} for s in skills]
+    skills = db.query(StudentSkill).filter(StudentSkill.profile_id == profile.id).all()
+    assessments = db.query(StudentAssessment).filter(StudentAssessment.student_id == user_id).all()
+    projects = db.query(StudentProject).filter(StudentProject.profile_id == profile.id).all()
 
-            if StudentAssessment:
-                latest_test = db.query(StudentAssessment).filter(
-                    StudentAssessment.student_id == profile.id
-                ).order_by(StudentAssessment.id.desc()).first()
-
-                if latest_test:
-                    overall_score = getattr(latest_test, "score", 0)
-                    scores_field = getattr(latest_test, "skill_scores", None)
-                    if scores_field:
-                        if isinstance(scores_field, str):
-                            try:
-                                scores_field = json.loads(scores_field)
-                            except Exception:
-                                scores_field = {}
-                        assessment_skills = {k: int(v) for k, v in scores_field.items()}
-
-        if not self_rated and not assessment_skills:
-            self_rated = [
-                {"skill": "Python", "proficiency": 75},
-                {"skill": "React", "proficiency": 70},
-                {"skill": "SQL", "proficiency": 60}
-            ]
-            assessment_skills = {"Python": 55, "React": 40, "SQL": 40, "Problem Solving": 40}
-            overall_score = 43
-
-        return {
-            "student_profile": {
-                "id": profile.id if profile else 1,
-                "name": profile.user.full_name if profile and profile.user else "Student Candidate",
-                "institution": profile.institution if profile else "Partner Institution"
-            },
-            "self_rated_skills": self_rated,
-            "assessment_scores": assessment_skills,
-            "overall_assessment_score": overall_score
-        }
-    finally:
-        db.close()
+    return json.dumps({
+        "name": user.name if user else "Student",
+        "department": profile.department,
+        "cgpa": profile.cgpa,
+        "skills": [{"name": s.skill_name, "self": s.self_rating, "verified": s.verified_rating, "is_verified": bool(s.is_verified)} for s in skills],
+        "assessments": [{"skill": a.skill_name, "score": a.score, "level": a.verified_level} for a in assessments],
+        "projects": [p.title for p in projects],
+        "has_assessments": len(assessments) > 0,
+    })
 
 
-def analyze_assessed_skills(state: RecommendationState) -> dict:
-    test_scores = state.get("assessment_scores") or {}
-    self_skills = state.get("self_rated_skills") or []
-    
-    merged = merge_skills(self_skills, test_scores)
-    
-    gaps = []
-    for skill_name, score in test_scores.items():
-        if score < 60:
-            gaps.append(skill_name)
-            
-    for s in self_skills:
-        if s["skill"] not in test_scores and s["proficiency"] < 60:
-            gaps.append(s["skill"])
+@tool
+def fetch_and_rank_opportunities(profile_json: str, db: Session) -> str:
+    """Fetches all active opportunities and computes weighted match scores against verified skills."""
+    profile = json.loads(profile_json)
+    if not profile.get("has_assessments"):
+        return json.dumps({"matched": [], "reason": "No assessments"})
 
-    return {
-        "merged_skills": merged,
-        "skill_gaps": list(set(gaps))
-    }
+    skill_lookup = {}
+    for s in profile["skills"]:
+        eff = s["verified"] if s["is_verified"] and s["verified"] > 0 else s["self"] * 0.6
+        skill_lookup[s["name"].lower().strip()] = {"eff": eff, "verified": s["is_verified"]}
 
-
-def fetch_and_match_internships(state: RecommendationState) -> dict:
-    db = SessionLocal()
-    try:
-        opps = db.query(Opportunity).filter(Opportunity.is_active == True).all()
-        self_skills = state.get("self_rated_skills", [])
-        test_scores = state.get("assessment_scores", {})
-
-        internships, jobs, projects = [], [], []
-
-        for o in opps:
-            company = o.recruiter.company_name if o.recruiter else "Industry Partner"
-            req_skills = o.required_skills or []
-            if isinstance(req_skills, str):
-                try:
-                    req_skills = json.loads(req_skills)
-                except Exception:
-                    req_skills = []
-
-            score, matched, missing, is_verified = compute_assessment_driven_match(
-                self_skills, test_scores, req_skills
-            )
-
-            if score >= 10 or len(internships) < 10:
-                item = {
-                    "id": o.id,
-                    "title": o.title,
-                    "company": company,
-                    "location": o.location or "Remote",
-                    "stipend": o.stipend or "Competitive",
-                    "duration": o.duration or "3-6 months",
-                    "description": o.description or "",
-                    "required_skills": req_skills,
-                    "match_score": max(15, score),
-                    "matched_skills": matched or [],
-                    "missing_skills": missing or [],
-                    "assessment_verified": is_verified
-                }
-                if o.type == OpportunityType.INTERNSHIP:
-                    internships.append(item)
-                elif o.type == OpportunityType.JOB:
-                    jobs.append(item)
-                elif o.type == OpportunityType.PROJECT:
-                    projects.append(item)
-
-        internships.sort(key=lambda x: x["match_score"], reverse=True)
-        jobs.sort(key=lambda x: x["match_score"], reverse=True)
-        
-        return {
-            "internships": internships[:15],
-            "jobs": jobs[:10],
-            "projects": projects[:5]
-        }
-    finally:
-        db.close()
-
-
-def fetch_bridge_courses(state: RecommendationState) -> dict:
+    opps = db.query(Opportunity).filter(Opportunity.status == "active").all()
     matched = []
-    try:
-        from models.course import Course
-        db = SessionLocal()
-        try:
-            courses = db.query(Course).all()
-            gaps = set(g.lower() for g in state.get("skill_gaps", []))
-            for c in courses:
-                covered = set()
-                if hasattr(c, "skills_covered") and c.skills_covered:
-                    s_data = c.skills_covered
-                    if isinstance(s_data, str):
-                        try:
-                            s_data = json.loads(s_data)
-                        except Exception:
-                            s_data = []
-                    for s in s_data:
-                        if isinstance(s, str):
-                            covered.add(s.lower())
-                        elif isinstance(s, dict):
-                            covered.add(s.get("skill", "").lower())
-                overlap = covered & gaps
-                if overlap or not gaps:
-                    matched.append({
-                        "id": c.id,
-                        "title": c.title,
-                        "provider": getattr(c, "provider", "SkillBridge Learn"),
-                        "skills_covered": list(overlap) if overlap else [c.title],
-                        "rating": getattr(c, "rating", 4.8),
-                        "price": getattr(c, "price", "Free"),
-                        "duration": getattr(c, "duration", "Self-paced"),
-                        "level": getattr(c, "level", "Intermediate"),
-                    })
-        finally:
-            db.close()
-    except Exception:
-        pass
 
-    if not matched:
-        matched = [
-            {"id": 101, "title": "Mastering React Component Optimization & Hooks", "provider": "SkillBridge Learn", "skills_covered": ["React"], "rating": 4.9, "price": "Free", "duration": "4 hours", "level": "Intermediate"},
-            {"id": 102, "title": "SQL Indexing, Execution Plans & Performance Tuning", "provider": "SkillBridge Learn", "skills_covered": ["SQL"], "rating": 4.8, "price": "Free", "duration": "5 hours", "level": "Intermediate"},
-            {"id": 103, "title": "Python Concurrency, Multiprocessing & Memory Management", "provider": "SkillBridge Learn", "skills_covered": ["Python"], "rating": 4.9, "price": "Free", "duration": "6 hours", "level": "Advanced"},
-        ]
+    for opp in opps:
+        req_list = [r.strip().lower() for r in (opp.required_skills or "").split(",") if r.strip()]
+        if not req_list:
+            continue
 
-    return {"courses": matched[:6]}
+        weight = 0.0
+        missing = []
+        ver_count = 0
+        for req in req_list:
+            if req in skill_lookup:
+                info = skill_lookup[req]
+                if info["verified"]:
+                    ver_count += 1
+                    weight += min((info["eff"] / 10.0) * 1.25, 1.0)
+                else:
+                    weight += (info["eff"] / 10.0) * 0.75
+            else:
+                missing.append(req.title())
+
+        score = (weight / len(req_list)) * 100.0
+        if profile.get("cgpa") and opp.min_cgpa and profile["cgpa"] >= opp.min_cgpa:
+            score += 5.0
+        score += min(len(profile["assessments"]) * 2.0, 10.0)
+        score = round(min(max(score, 15.0), 100.0), 1)
+
+        matched.append({
+            "id": opp.id, "title": opp.title, "company_name": opp.company_name,
+            "location": opp.location, "opportunity_type": opp.opportunity_type,
+            "stipend": opp.stipend, "duration": opp.duration,
+            "required_skills": opp.required_skills, "min_cgpa": opp.min_cgpa,
+            "description": opp.description,
+            "match_percentage": score, "match_score": score,
+            "missing_skills": missing, "verified_skills_matched": ver_count,
+        })
+
+    matched.sort(key=lambda x: x["match_percentage"], reverse=True)
+    return json.dumps({"matched": matched[:12]})
 
 
-def generate_ai_assessment_career_advice(state: RecommendationState) -> dict:
-    test_scores = state.get("assessment_scores") or {}
-    overall_score = state.get("overall_assessment_score", 0)
-    top_opps = state.get("internships", [])[:3]
+@tool
+def identify_gaps_and_courses(profile_json: str, matched_json: str, db: Session) -> str:
+    """Identifies weak skills from assessment scores and maps them to YouTube bridge courses."""
+    profile = json.loads(profile_json)
+    matched_data = json.loads(matched_json)
 
-    strengths = [k for k, v in test_scores.items() if v >= 60]
-    weaknesses = [k for k, v in test_scores.items() if v < 60]
+    weak_skills = set()
+    for m in matched_data.get("matched", [])[:6]:
+        for ms in m.get("missing_skills", []):
+            weak_skills.add(ms.strip())
+    for s in profile.get("skills", []):
+        eff = s["verified"] if s["is_verified"] else s["self"] * 0.6
+        if eff < 6.0:
+            weak_skills.add(s["name"].strip())
+    for a in profile.get("assessments", []):
+        if a["score"] < 60:
+            weak_skills.add(a["skill"].strip())
 
-    skills_summary = ", ".join([f"{k} ({v}%)" for k, v in test_scores.items()])
-    top_matches = ", ".join([f"{i['title']} at {i['company']} ({i['match_score']}% match)" for i in top_opps]) if top_opps else "Engineering roles"
+    gap_courses = []
+    for skill in list(weak_skills)[:8]:
+        courses = db.query(Course).filter(Course.skill_tags.ilike(f"%{skill}%")).all()
+        if courses:
+            curated = [{"title": c.title, "provider": c.provider, "youtube_url": c.url, "duration": f"{int(c.duration_hours)}h", "rating": c.rating, "is_free": bool(c.is_free)} for c in courses[:3]]
+        else:
+            curated = [{"title": f"Learn {skill.title()}", "provider": "YouTube", "youtube_url": f"https://www.youtube.com/results?search_query={skill.replace(chr(32), chr(43))}+full+course", "duration": "4-8h", "rating": 4.7, "is_free": True}]
+        gap_courses.append({"skill": skill.title(), "weak_skill": skill.title(), "courses": curated})
 
-    str_str = ", ".join(strengths) if strengths else "Python foundation"
-    weak_str = ", ".join(weaknesses) if weaknesses else "React and SQL"
-
-    prompt = (
-        "You are an expert AI Career Mentor analyzing a student assessment.\n"
-        f"Assessment Score: {overall_score}%\n"
-        f"Verified Skill Scores: {skills_summary}\n"
-        f"Strengths: {str_str}\n"
-        f"Gaps to Improve: {weak_str}\n\n"
-        f"Top Recommended Internships: {top_matches}\n\n"
-        "In 3 concise sentences:\n"
-        f"1. Acknowledge their test score ({overall_score}%) and highlight their strongest verified skill.\n"
-        "2. Identify the highest priority skill gap they should improve using bridge courses.\n"
-        "3. Give one encouraging next action step.\n"
-        "Do not use bullet points."
-    )
-
-    advice = _call_llm(prompt)
-    if not advice:
-        top_role = top_opps[0] if top_opps else {"title": "Python Intern", "company": "Tech Partner", "match_score": 55}
-        gap_text = ", ".join(weaknesses[:2]) if weaknesses else "SQL and React"
-        advice = (
-            f"Based on your diagnostic score of {overall_score}%, your verified skills match key requirements "
-            f"for the {top_role['title']} position at {top_role['company']}. To boost your candidacy for higher-matching "
-            f"roles, take our recommended gap-bridge courses in {gap_text}."
-        )
-
-    return {"ai_analysis": advice}
+    return json.dumps({"gap_courses": gap_courses})
 
 
-def build_recommendation_graph():
-    workflow = StateGraph(RecommendationState)
-    workflow.add_node("fetch_data", fetch_student_and_assessment)
-    workflow.add_node("analyze_skills", analyze_assessed_skills)
-    workflow.add_node("match_internships", fetch_and_match_internships)
-    workflow.add_node("fetch_courses", fetch_bridge_courses)
-    workflow.add_node("ai_advice", generate_ai_assessment_career_advice)
+@tool
+def generate_ai_career_advice(profile_json: str, matched_json: str) -> str:
+    """Calls Groq Llama-3.3-70B to generate personalized career strategy advice."""
+    profile = json.loads(profile_json)
+    matched_data = json.loads(matched_json)
 
-    workflow.set_entry_point("fetch_data")
-    workflow.add_edge("fetch_data", "analyze_skills")
-    workflow.add_edge("analyze_skills", "match_internships")
-    workflow.add_edge("match_internships", "fetch_courses")
-    workflow.add_edge("fetch_courses", "ai_advice")
-    workflow.add_edge("ai_advice", END)
+    if not profile.get("has_assessments"):
+        return ""
 
-    return workflow.compile()
+    llm = get_llm()
+    skill_text = ", ".join([f"{s[chr(110)+chr(97)+chr(109)+chr(101)]} ({s[chr(118)+chr(101)+chr(114)+chr(105)+chr(102)+chr(105)+chr(101)+chr(100)]}/10)" if s["is_verified"] else f"{s[chr(110)+chr(97)+chr(109)+chr(101)]} (Self: {s[chr(115)+chr(101)+chr(108)+chr(102)]}/10)" for s in profile.get("skills", [])])
+    top_matches = ", ".join([m["title"] for m in matched_data.get("matched", [])[:3]])
+
+    prompt = f"Career coaching for Indian student: {profile[chr(110)+chr(97)+chr(109)+chr(101)]}, Dept: {profile[chr(100)+chr(101)+chr(112)+chr(97)+chr(114)+chr(116)+chr(109)+chr(101)+chr(110)+chr(116)]}, CGPA: {profile[chr(99)+chr(103)+chr(112)+chr(97)]}, Skills: {skill_text}, Top Matches: {top_matches}. Give 3 actionable bullet points including AYUSH sector."
+
+    response = llm.invoke(prompt)
+    return response.content
 
 
-def get_recommendations(user_id: int) -> dict:
-    graph = build_recommendation_graph()
-    result = graph.invoke({"user_id": user_id})
+# ── LangGraph Nodes ──
+def node_fetch_profile(state: RecommendationState, db: Session) -> dict:
+    """Node 1: Fetch student profile (LangSmith trace)"""
+    raw = fetch_student_profile.invoke({"user_id": state["user_id"], "db": db})
+    data = json.loads(raw)
+    return {"profile_data": data, "has_assessments": data.get("has_assessments", False)}
+
+def node_rank_opportunities(state: RecommendationState, db: Session) -> dict:
+    """Node 2: Rank opportunities (LangSmith trace)"""
+    if not state.get("has_assessments"):
+        return {"matched_internships": [], "message": "Complete at least one assessment to unlock recommendations."}
+    raw = fetch_and_rank_opportunities.invoke({"profile_json": json.dumps(state["profile_data"]), "db": db})
+    data = json.loads(raw)
+    return {"matched_internships": data.get("matched", [])}
+
+def node_find_gaps(state: RecommendationState, db: Session) -> dict:
+    """Node 3: Identify gaps and courses (LangSmith trace)"""
+    if not state.get("has_assessments"):
+        return {"gap_courses": []}
+    raw = identify_gaps_and_courses.invoke({
+        "profile_json": json.dumps(state["profile_data"]),
+        "matched_json": json.dumps({"matched": state.get("matched_internships", [])}),
+        "db": db
+    })
+    data = json.loads(raw)
+    return {"gap_courses": data.get("gap_courses", [])}
+
+def node_career_advice(state: RecommendationState, db: Session) -> dict:
+    """Node 4: Generate AI career advice (LangSmith trace)"""
+    if not state.get("has_assessments"):
+        return {"career_advice": ""}
+    advice = generate_ai_career_advice.invoke({
+        "profile_json": json.dumps(state["profile_data"]),
+        "matched_json": json.dumps({"matched": state.get("matched_internships", [])})
+    })
+    return {"career_advice": advice}
+
+
+# ── Public API ──
+def get_recommendations(user_id: int, db: Session) -> dict:
+    """Runs the full 4-node recommendation pipeline (all steps in LangSmith)."""
+
+    graph = StateGraph(RecommendationState)
+    graph.add_node("fetch_profile", lambda s: node_fetch_profile(s, db))
+    graph.add_node("rank_opportunities", lambda s: node_rank_opportunities(s, db))
+    graph.add_node("find_gaps", lambda s: node_find_gaps(s, db))
+    graph.add_node("career_advice", lambda s: node_career_advice(s, db))
+
+    graph.set_entry_point("fetch_profile")
+    graph.add_edge("fetch_profile", "rank_opportunities")
+    graph.add_edge("rank_opportunities", "find_gaps")
+    graph.add_edge("find_gaps", "career_advice")
+    graph.add_edge("career_advice", END)
+
+    app = graph.compile()
+
+    result = app.invoke({
+        "user_id": user_id, "profile_data": {}, "skill_data": [],
+        "assessment_data": [], "opportunities": [], "matched_internships": [],
+        "gap_courses": [], "career_advice": "", "has_assessments": False, "message": ""
+    })
+
+    has = result.get("has_assessments", False)
     return {
-        "courses": result.get("courses", []),
-        "internships": result.get("internships", []),
-        "jobs": result.get("jobs", []),
-        "projects": result.get("projects", []),
-        "skill_gaps": result.get("skill_gaps", []),
-        "ai_analysis": result.get("ai_analysis"),
-        "skills_used": result.get("merged_skills", []),
-        "assessment_score": result.get("overall_assessment_score", 0),
-        "assessment_verified": len(result.get("assessment_scores", {})) > 0
+        "career_advice": result.get("career_advice", ""),
+        "recommended_internships": result.get("matched_internships", []),
+        "matched_opportunities": result.get("matched_internships", []),
+        "gap_courses": result.get("gap_courses", []),
+        "bridge_courses": result.get("gap_courses", []),
+        "skill_gaps": [s for s in result.get("profile_data", {}).get("skills", []) if (s.get("verified", 0) if s.get("is_verified") else s.get("self", 0) * 0.6) < 6.0],
+        "skill_summary": result.get("profile_data", {}).get("skills", []),
+        "assessments_taken_count": len(result.get("profile_data", {}).get("assessments", [])),
+        "has_assessments": has,
+        "message": result.get("message", "") if not has else "",
+        "trace_info": "Full 4-node pipeline traceable in LangSmith: fetch_profile -> rank_opportunities -> find_gaps -> career_advice",
     }

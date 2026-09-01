@@ -1,89 +1,81 @@
-// Landing Page
-import React from 'react'
-import { Link } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import React from 'react';
+import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import Navbar from '../components/Navbar';
 
-const features = [
-  {
-    title: 'AI assessment',
-    copy: 'Adaptive, question-by-question assessments that adjust difficulty to what you actually know.',
-  },
-  {
-    title: 'Skill mapping',
-    copy: 'A clear, scored breakdown of your strengths and gaps across every skill you list.',
-  },
-  {
-    title: 'Career matching',
-    copy: 'Ranked internships, jobs, courses, and projects matched against your live skill map.',
-  },
-]
+export default function LandingPage() {
+  const navigate = useNavigate();
 
-const LandingPage = () => {
+  const features = [
+    { title: 'AI Assessment', desc: 'Adaptive scenario-based tests that verify what you actually know — no more resume inflation.', label: '01 · VERIFY' },
+    { title: 'Skill Mapping', desc: 'Visual proficiency map with verified scores, benchmarked against real industry demand.', label: '02 · MAP' },
+    { title: 'Career Matching', desc: 'AI ranks internships & placements by your verified skills — with targeted bridge courses for gaps.', label: '03 · MATCH' },
+  ];
+
   return (
-    <div className="min-h-screen bg-paper">
-      <nav className="bg-blueprint">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <span className="flex items-center gap-2 text-white font-display font-bold text-xl">
-            <span className="w-2 h-2 rounded-full bg-gold" />
-            SkillBridge
-          </span>
-          <div className="flex gap-3 items-center">
-            <Link to="/login" className="text-white/80 hover:text-white text-sm font-medium">Log in</Link>
-            <Link to="/signup" className="btn btn-cta text-sm py-2.5 px-5">Get started</Link>
-          </div>
-        </div>
-      </nav>
+    <div className="blueprint-surface" style={{ minHeight: '100vh' }}>
+      <Navbar />
 
-      <section className="blueprint-surface py-24 md:py-32 relative overflow-hidden">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-left relative">
-          <motion.h1
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-4xl md:text-6xl font-display font-bold text-white leading-tight max-w-3xl"
-          >
-            Prove your skills.
-            <br />Not just your resume.
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-lg text-blueprint-100 mt-6 max-w-xl"
-          >
-            SkillBridge assesses what you can actually do, maps your skill gaps, and
-            connects you to internships, jobs, courses, and projects worth your time.
-          </motion.p>
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mt-8"
-          >
-            <Link to="/signup" className="btn btn-cta text-base">
-              Start your assessment
-            </Link>
-          </motion.div>
-        </div>
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '100px 40px 80px', textAlign: 'center' }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
+          <div className="metric-label" style={{ color: '#F1DBA3', marginBottom: 20 }}>
+            SIH 2024 · MINISTRY OF AYUSH · AICTE
+          </div>
+        </motion.div>
+
+        <motion.h1
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.2 }}
+          style={{
+            fontSize: 'clamp(38px, 6vw, 64px)',
+            fontWeight: 700,
+            color: '#ffffff',
+            letterSpacing: '-1.5px',
+            lineHeight: 1.05,
+            margin: '0 0 24px 0',
+          }}
+        >
+          Prove your skills.<br />
+          <span style={{ color: '#D9A441' }}>Not just your resume.</span>
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+          style={{ fontSize: 18, color: 'rgba(255,255,255,0.75)', maxWidth: 640, margin: '0 auto 40px', lineHeight: 1.6 }}
+        >
+          An academia-industry collaboration platform for students, recruiters, and academicians.
+          Verify skills through adaptive AI assessments and unlock personalized career opportunities.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.55 }}
+          style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}
+        >
+          <button onClick={() => navigate('/signup')} className="btn btn-cta" style={{ padding: '14px 28px', fontSize: 15 }}>
+            Start your assessment →
+          </button>
+          <button onClick={() => navigate('/login')} className="btn btn-secondary" style={{ padding: '14px 28px', fontSize: 15, color: '#F1F5F9', borderColor: 'rgba(255,255,255,0.4)' }}>
+            I already have an account
+          </button>
+        </motion.div>
       </section>
 
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl md:text-3xl font-display font-bold mb-12 max-w-xl">
-            Built for students, recruiters, and academicians who want signal over noise.
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {features.map((f) => (
-              <div key={f.title} className="blueprint-card rounded-lg p-6">
-                <h3 className="font-display font-bold text-lg mb-2">{f.title}</h3>
-                <p className="text-ink/65 text-sm leading-relaxed">{f.copy}</p>
-              </div>
-            ))}
-          </div>
+      <section style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 40px 100px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24 }}>
+          {features.map((f, i) => (
+            <motion.div key={i} initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.7 + i * 0.1 }} className="blueprint-card">
+              <div className="card-strip">{f.label}</div>
+              <h3 style={{ margin: '0 0 10px 0' }}>{f.title}</h3>
+              <p style={{ color: '#12202B', opacity: 0.75, fontSize: 14, lineHeight: 1.6, margin: 0 }}>{f.desc}</p>
+            </motion.div>
+          ))}
         </div>
       </section>
     </div>
-  )
+  );
 }
-
-export default LandingPage

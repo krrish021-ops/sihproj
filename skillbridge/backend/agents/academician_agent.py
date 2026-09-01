@@ -1,60 +1,106 @@
-"""
-Academician Agent
-"""
 import json
-from database import SessionLocal
-from models.user import StudentProfile, StudentSkill, AcademicianProfile
-from models.opportunity import Opportunity, OpportunityType
-from services.matching_service import compute_match_detailed
+from typing import TypedDict
+from sqlalchemy.orm import Session
 
-def get_department_recommendations(user_id: int) -> dict:
-    db = SessionLocal()
+from langgraph.graph import StateGraph, END
+from langchain_core.tools import tool
+from utils.llm_setup import get_llm
+from models.student import StudentProfile, StudentSkill
+from models.opportunity import Opportunity
+from models.academician import Academician
+
+
+class AnalyticsState(TypedDict):
+    user_id: int
+    department: str
+    supply_data: dict
+    demand_data: dict
+    gap_analysis: list
+    predictions: dict
+
+
+@tool
+def compute_supply_demand(department: str, db: Session) -> str:
+    """Computes real-time skill supply from students and demand from active opportunities."""
+    profiles = db.query(StudentProfile).filter(StudentProfile.department == department).all()
+    if not profiles:
+        profiles = db.query(StudentProfile).all()
+
+    p_ids = [p.id for p in profiles]
+    skills = db.query(StudentSkill).filter(StudentSkill.profile_id.in_(p_ids)).all() if p_ids else []
+
+    supply = {}
+    for s in skills:
+        k = s.skill_name.strip()
+        if k not in supply:
+            supply[k] = {"count": 0, "verified": 0}
+        supply[k]["count"] += 1
+        if s.is_verified:
+            supply[k]["verified"] += 1
+
+    opps = db.query(Opportunity).filter(Opportunity.status == "active").all()
+    demand = {}
+    for o in opps:
+        for r in (o.required_skills or "").split(","):
+            r = r.strip()
+            if r:
+                demand[r] = demand.get(r, 0) + 1
+
+    return json.dumps({"supply": supply, "demand": demand, "student_count": len(profiles)})
+
+
+@tool
+def generate_predictions(supply_demand_json: str, department: str) -> str:
+    """Calls Groq Llama-3.3-70B to generate 12-month capacity building predictions."""
+    data = json.loads(supply_demand_json)
+    llm = get_llm()
+
+    prompt = f"Analyze cohort data for {department}:\nSupply: {json.dumps(data[chr(115)+chr(117)+chr(112)+chr(112)+chr(108)+chr(121)])}\nDemand: {json.dumps(data[chr(100)+chr(101)+chr(109)+chr(97)+chr(110)+chr(100)])}\n\nReturn JSON: {{\"curriculum_gap_index\": 25, \"emerging_demands_next_year\": [...], \"ayush_interdisciplinary_opportunities\": [...], \"strategic_capacity_interventions\": [{{\"action\": \"...\", \"urgency\": \"High\", \"impact\": \"...\"}}]}}"
+
+    response = llm.invoke(prompt)
+    return response.content
+
+
+def node_compute(state: AnalyticsState, db: Session) -> dict:
+    """Node 1: Compute supply/demand (LangSmith trace)"""
+    raw = compute_supply_demand.invoke({"department": state["department"], "db": db})
+    data = json.loads(raw)
+    return {"supply_data": data.get("supply", {}), "demand_data": data.get("demand", {})}
+
+def node_predict(state: AnalyticsState, db: Session) -> dict:
+    """Node 2: AI predictions (LangSmith trace)"""
+    raw = generate_predictions.invoke({
+        "supply_demand_json": json.dumps({"supply": state.get("supply_data", {}), "demand": state.get("demand_data", {})}),
+        "department": state["department"]
+    })
     try:
-        acad = db.query(AcademicianProfile).filter(AcademicianProfile.user_id == user_id).first()
-        institution = acad.institution if acad else "Institute of Technology"
-        department = acad.department if acad else "Computer Science"
-        students = db.query(StudentProfile).all()
-        dept_skills = {}
-        for student in students:
-            skills = db.query(StudentSkill).filter(StudentSkill.student_id == student.id).all()
-            for s in skills:
-                name = s.skill_name.lower().strip()
-                if name:
-                    if name not in dept_skills:
-                        dept_skills[name] = {"total": 0, "count": 0}
-                    dept_skills[name]["total"] += s.proficiency
-                    dept_skills[name]["count"] += 1
-        avg_skills = [{"skill": name.title(), "proficiency": int(d["total"] / d["count"])} for name, d in dept_skills.items()]
-        avg_skills.sort(key=lambda x: x["proficiency"], reverse=True)
-        opps = db.query(Opportunity).filter(Opportunity.is_active == True, Opportunity.type == OpportunityType.INTERNSHIP).all()
-        recommendations = []
-        for o in opps:
-            req = o.required_skills or []
-            if isinstance(req, str):
-                try:
-                    req = json.loads(req)
-                except Exception:
-                    continue
-            score, matched, missing = compute_match_detailed(avg_skills, req)
-            if score >= 30:
-                recommendations.append({
-                    "id": o.id,
-                    "title": o.title,
-                    "company": o.recruiter.company_name if o.recruiter else "Partner Corp",
-                    "location": o.location or "Remote",
-                    "stipend": o.stipend or "Competitive",
-                    "match_score": score,
-                    "matched_skills": matched,
-                    "missing_skills": missing,
-                })
-        recommendations.sort(key=lambda x: x["match_score"], reverse=True)
-        return {
-            "institution": institution,
-            "department": department,
-            "student_count": len(students),
-            "department_skills": avg_skills[:10],
-            "skill_gaps": [s for s in avg_skills if s["proficiency"] < 60][:5],
-            "recommended_internships": recommendations[:10],
-        }
-    finally:
-        db.close()
+        import re
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        predictions = json.loads(m.group()) if m else {}
+    except Exception:
+        predictions = {}
+    return {"predictions": predictions}
+
+
+def get_predictive_analytics(user_id: int, db: Session) -> dict:
+    """Runs the 2-node analytics pipeline (traced in LangSmith)."""
+    acad = db.query(Academician).filter(Academician.user_id == user_id).first()
+    dept = acad.department if (acad and acad.department) else "Computer Science"
+
+    graph = StateGraph(AnalyticsState)
+    graph.add_node("compute", lambda s: node_compute(s, db))
+    graph.add_node("predict", lambda s: node_predict(s, db))
+    graph.set_entry_point("compute")
+    graph.add_edge("compute", "predict")
+    graph.add_edge("predict", END)
+
+    app = graph.compile()
+    result = app.invoke({"user_id": user_id, "department": dept, "supply_data": {}, "demand_data": {}, "gap_analysis": [], "predictions": {}})
+
+    return {
+        "department": dept,
+        "supply": result.get("supply_data", {}),
+        "demand": result.get("demand_data", {}),
+        "predictions": result.get("predictions", {}),
+        "trace_info": "Analytics pipeline traceable in LangSmith: compute -> predict",
+    }

@@ -1,12 +1,9 @@
-from .user import User, StudentProfile, StudentSkill, StudentProject, RecruiterProfile, AcademicianProfile, UserRole
-from .opportunity import Opportunity, Application, OpportunityType
-from .assessment import Assessment, Question, StudentAssessment
-from .course import Course, Project
-
-__all__ = [
-    'User', 'StudentProfile', 'StudentSkill', 'StudentProject',
-    'RecruiterProfile', 'AcademicianProfile', 'UserRole',
-    'Opportunity', 'Application', 'OpportunityType',
-    'Assessment', 'Question', 'StudentAssessment',
-    'Course', 'Project'
-]
+from models.user import User
+from models.student import StudentProfile, StudentSkill, StudentProject
+from models.recruiter import Recruiter
+from models.academician import Academician
+from models.opportunity import Opportunity
+from models.application import Application
+from models.assessment import Assessment, Question, StudentAssessment
+from models.course import Course
+from models.project import Project

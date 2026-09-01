@@ -1,53 +1,60 @@
-"""
-Groq LLM Configuration & Setup
-==============================
-Provides LLMConfig and helper functions for LangGraph agents.
-"""
-
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-class LLMConfig:
-    """Configuration class for Groq LLMs used across LangGraph agents."""
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-    DEFAULT_MODEL = "llama-3.3-70b-versatile"
-    FAST_MODEL = "llama-3.1-8b-instant"
-    ASSESSMENT_MODEL = "llama-3.3-70b-versatile"
+# LangSmith auto-tracing is activated by environment variables:
+# LANGCHAIN_TRACING_V2=true
+# LANGCHAIN_API_KEY=lsv2_pt_...
+# LANGCHAIN_PROJECT=skillbridge-sih-2024
+# All LangChain/LangGraph calls will automatically appear in LangSmith.
 
-    @classmethod
-    def get_llm(cls, model_name: str = None, temperature: float = 0.3):
-        model = model_name or cls.DEFAULT_MODEL
-        api_key = cls.GROQ_API_KEY or os.getenv("GROQ_API_KEY", "")
-        try:
-            from langchain_groq import ChatGroq
-            return ChatGroq(
-                groq_api_key=api_key if api_key else "gsk_placeholder_key",
-                model_name=model,
-                temperature=temperature,
-            )
-        except Exception as e:
-            print(f"Notice: ChatGroq initialization ({model}): {e}")
-            return None
+def get_llm():
+    """Primary reasoning model — Llama 3.3 70B (traced by LangSmith)"""
+    try:
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            temperature=0.4,
+            model_name="llama-3.3-70b-versatile",
+            groq_api_key=GROQ_API_KEY,
+        )
+    except Exception:
+        import groq
+        client = groq.Groq(api_key=GROQ_API_KEY)
+        class Wrapper:
+            def invoke(self, prompt):
+                res = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": str(prompt)}],
+                )
+                class M:
+                    content = res.choices[0].message.content
+                return M()
+        return Wrapper()
 
-    @classmethod
-    def get_fast_llm(cls, temperature: float = 0.1):
-        return cls.get_llm(model_name=cls.FAST_MODEL, temperature=temperature)
+def get_fast_llm():
+    """Fast model — Llama 3.1 8B (traced by LangSmith)"""
+    try:
+        from langchain_groq import ChatGroq
+        return ChatGroq(
+            temperature=0.3,
+            model_name="llama-3.1-8b-instant",
+            groq_api_key=GROQ_API_KEY,
+        )
+    except Exception:
+        import groq
+        client = groq.Groq(api_key=GROQ_API_KEY)
+        class Wrapper:
+            def invoke(self, prompt):
+                res = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=[{"role": "user", "content": str(prompt)}],
+                )
+                class M:
+                    content = res.choices[0].message.content
+                return M()
+        return Wrapper()
 
-    @classmethod
-    def get_assessment_llm(cls, temperature: float = 0.4):
-        return cls.get_llm(model_name=cls.ASSESSMENT_MODEL, temperature=temperature)
-
-
-def get_llm(model_name: str = "llama-3.3-70b-versatile", temperature: float = 0.3):
-    return LLMConfig.get_llm(model_name=model_name, temperature=temperature)
-
-
-def get_groq_llm(model_name: str = "llama-3.3-70b-versatile", temperature: float = 0.3):
-    return LLMConfig.get_llm(model_name=model_name, temperature=temperature)
-
-
-def get_chat_llm(model_name: str = "llama-3.3-70b-versatile", temperature: float = 0.3):
-    return LLMConfig.get_llm(model_name=model_name, temperature=temperature)
+get_fast_model = get_fast_llm
