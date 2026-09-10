@@ -532,5 +532,7 @@ hairline(s, 0.7, 6.98, W - 1.4)
 txt(s, 0.7, 7.06, 6.0, 0.3, [[("HEATSIGHT  ·  APPENDIX", 8.5, MUTED, True, FONT, 0, 0, "120")]])
 notes(s, "Backup only. If asked how LST is computed, walk steps 1–5, then the UHI and forecast lines. Under 60 seconds.")
 
-prs.save("uhi-ppt/HeatSight_UHI_PPT_Pro.pptx")
-print("Saved uhi-ppt/HeatSight_UHI_PPT_Pro.pptx")
+from pathlib import Path as _P
+_OUT = _P(__file__).resolve().parent / "HeatSight_UHI_PPT_Pro.pptx"
+prs.save(str(_OUT))
+print(f"Saved {_OUT}")

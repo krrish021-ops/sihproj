@@ -364,5 +364,7 @@ for head, rest in lines:
 footer(s, 11)
 notes(s, "Backup only. If asked 'how do you compute LST', walk through steps 1-5, then UHI and model line. Keep under 60 sec.")
 
-prs.save("uhi-ppt/HeatSight_UHI_PPT.pptx")
-print("Saved uhi-ppt/HeatSight_UHI_PPT.pptx with", len(prs.slides.__iter__.__self__._sldIdLst), "slides")
+from pathlib import Path as _P
+_OUT = _P(__file__).resolve().parent / "HeatSight_UHI_PPT.pptx"
+prs.save(str(_OUT))
+print(f"Saved {_OUT}")

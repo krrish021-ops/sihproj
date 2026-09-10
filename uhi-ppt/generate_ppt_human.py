@@ -342,5 +342,7 @@ for line in steps_txt:
 note_box(s, 0.8, 5.9, 11.73, 0.65, "Reference: Landsat Collection 2 handbook (USGS); Sobrino et al. NDVI-threshold emissivity method.")
 notes(s, "Only show if asked. Walk through the five steps briefly, then the UHI and model lines.")
 
-prs.save("uhi-ppt/HeatSight_UHI_PPT_Human.pptx")
-print("Saved uhi-ppt/HeatSight_UHI_PPT_Human.pptx")
+from pathlib import Path as _P
+_OUT = _P(__file__).resolve().parent / "HeatSight_UHI_PPT_Human.pptx"
+prs.save(str(_OUT))
+print(f"Saved {_OUT}")
