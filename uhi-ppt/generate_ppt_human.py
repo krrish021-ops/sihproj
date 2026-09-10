@@ -368,3 +368,14 @@ from pathlib import Path as _P
 _OUT = _P(__file__).resolve().parent / "HeatSight_UHI_PPT_Human.pptx"
 prs.save(str(_OUT))
 print(f"Saved {_OUT}")
+
+# Also drop a copy straight into the user's Downloads folder (if it exists)
+try:
+    _dl = _P.home() / "Downloads"
+    if _dl.is_dir():
+        import shutil as _sh
+        _sh.copy(str(_OUT), str(_dl / _OUT.name))
+        print(f"Also copied to {_dl / _OUT.name}")
+except Exception as _e:
+    print(f"(Downloads copy skipped: {_e})")
+
