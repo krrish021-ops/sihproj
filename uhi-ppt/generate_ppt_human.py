@@ -139,7 +139,9 @@ txt(s, 0.9, 1.0, 11.5, 0.4, [[("Smart India Hackathon 2026  •  Idea Presentati
 txt(s, 0.9, 1.5, 11.5, 1.0, [[("HeatSight: Forecasting Urban Heat Islands", 42, INK, True, None)]])
 txt(s, 0.9, 2.5, 11.0, 0.8, [[("Using satellite LST time-series and land-use data to predict heat intensification in growing Indian cities", 17, GRAY, False, None)]])
 shape_rect(s, 0.9, 3.5, 1.2, 0.045, fill=RED)
-txt(s, 0.9, 3.8, 11.5, 1.6, [
+shape_rect(s, 0.9, 3.72, 7.6, 1.55, fill=BOX, line=LINE, lw=0.75)
+shape_rect(s, 0.9, 3.72, 0.07, 1.55, fill=RED)
+txt(s, 1.25, 3.88, 7.1, 1.3, [
     [("Team: ", 14, INK, True, None), ("[ Your Team Name ]", 14, INK, False, None)],
     [("College: ", 14, INK, True, None), ("[ College Name, City ]", 14, INK, False, None)],
     [("Problem Statement ID: ", 14, INK, True, None), ("[ PS-ID ]", 14, INK, False, None)],
@@ -212,7 +214,7 @@ steps = [
 x = 0.8
 bw, bh = 1.95, 1.9
 for i, (title, desc) in enumerate(steps):
-    shape_rect(s, x, top + 0.15, bw, bh, fill=BOX if i % 2 else WHITE, line=LGRAY, lw=1.0)
+    shape_rect(s, x, top + 0.15, bw, bh, fill=BOX if i % 2 else WHITE, line=LGRAY, lw=1.0, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
     txt(s, x + 0.1, top + 0.28, bw - 0.2, 0.6, [[(title.replace("\n", " — "), 11.5, RED, True, None)]], align=PP_ALIGN.CENTER)
     txt(s, x + 0.1, top + 0.85, bw - 0.2, 1.1, [[(desc, 10.5, GRAY, False, None)]], align=PP_ALIGN.CENTER)
     if i < 4:
@@ -274,19 +276,39 @@ bullets(s, 6.7, top + 0.55, 5.8, [
 note_box(s, 6.7, 5.35, 5.83, 1.15, "Honest note: these are expected outputs. Real numbers will come only after we build the data pipeline.")
 notes(s, "Be honest: this chart shows the OUTPUT FORMAT with sample numbers, not real results. Then read the four deliverables.")
 
-# ============ 8 · WORK PLAN ============
+# ============ 8 · SYSTEM ARCHITECTURE ============
 s = prs.slides.add_slide(BLANK)
-top = header(s, 8, "Work plan", "How we will build this step by step (pilot: one city first)")
-data = [
-    ("Phase", "Time", "Work", "Outcome"),
-    ("1. Data", "Week 1–2", "Collect Landsat + Sentinel-2 data on GEE; prepare ward maps", "Clean 10-year heat dataset"),
-    ("2. Model", "Week 3–4", "Build features; train and test ML model; compare with IMD data", "2030 ward-level forecast"),
-    ("3. Outputs", "Week 5–6", "Prepare maps, tables, charts and ward action notes", "Complete pilot report"),
-    ("4. Testing", "Week 7+", "Ground checks; extend method to a second city", "Tested, repeatable method"),
-]
-simple_table(s, 0.8, top + 0.1, 11.73, data, [1.1, 1.3, 5.2, 4.13], size=12, row_h=0.7)
-note_box(s, 0.8, 5.7, 11.73, 0.85, "Possible difficulties: cloudy satellite images in monsoon months; we will use summer-season images and standard cloud filters.")
-notes(s, "Show the plan is realistic: one city first, then repeat. Mentioning the monsoon/cloud difficulty shows maturity.")
+top = header(s, 8, "System architecture", "How the parts connect — satellite data in, planning decisions out")
+
+def arch_band(y, label, sub, boxes, fillc):
+    shape_rect(s, 0.8, y, 11.73, 1.28, fill=fillc, line=LINE, lw=0.75)
+    shape_rect(s, 0.8, y, 0.07, 1.28, fill=RED)
+    txt(s, 1.05, y + 0.24, 1.8, 0.9, [
+        [(label, 11.5, RED, True, None)],
+        [(sub, 9.5, GRAY, False, None)],
+    ])
+    bw = 2.18
+    x = 3.05
+    for b in boxes:
+        shape_rect(s, x, y + 0.22, bw, 0.84, fill=WHITE, line=LGRAY, lw=0.9, shape=MSO_SHAPE.ROUNDED_RECTANGLE)
+        tx2 = s.shapes.add_textbox(Inches(x + 0.08), Inches(y + 0.24), Inches(bw - 0.16), Inches(0.8))
+        tf2 = tx2.text_frame; tf2.word_wrap = True
+        tf2.vertical_anchor = MSO_ANCHOR.MIDDLE
+        p0 = tf2.paragraphs[0]; p0.alignment = PP_ALIGN.CENTER
+        r0 = p0.add_run(); r0.text = b
+        r0.font.size = Pt(10.5); r0.font.bold = True; r0.font.color.rgb = INK; r0.font.name = FONT
+        x += bw + 0.18
+
+arch_band(top + 0.05, "LAYER 1", "Data sources",
+          ["Landsat 8/9\nthermal (LST)", "Sentinel-2\nland-use images", "MODIS LST\n+ IMD records", "Ward / city\nboundary maps"], BOX)
+txt(s, 6.3, top + 1.36, 0.7, 0.32, [[("▼", 13, LGRAY, True, None)]], align=PP_ALIGN.CENTER)
+arch_band(top + 1.68, "LAYER 2", "Processing + model",
+          ["Clean + align\ndata (GEE)", "Build features:\nNDVI, NDBI…", "Train ML model\n(RF / XGBoost)", "Forecast\n2030 hotspots"], WHITE)
+txt(s, 6.3, top + 2.99, 0.7, 0.32, [[("▼", 13, LGRAY, True, None)]], align=PP_ALIGN.CENTER)
+arch_band(top + 3.31, "LAYER 3", "Outputs + users",
+          ["Hotspot maps\n(GIS layers)", "Ward heat-risk\ntables", "Ward action\nnotes", "City heat-plan\nreport"], BOX)
+txt(s, 0.8, top + 4.72, 11.73, 0.35, [[("Build order:  data pipeline  →  model  →  outputs  →  field testing    ·    Pilot on one city first (about 7 weeks)", 10.5, GRAY, False, None)]])
+notes(s, "Explain the three layers: what data comes in, what the model does, what the planner gets. Mention the build-order line at the bottom.")
 
 # ============ 9 · IMPACT AND USERS ============
 s = prs.slides.add_slide(BLANK)
